@@ -142,13 +142,14 @@ type fakeTimer struct {
 }
 
 type fakeClock struct {
-	mu     sync.Mutex
-	now    time.Time
-	timers []*fakeTimer
+	mu         sync.Mutex
+	now        time.Time
+	timers     []*fakeTimer
+	timerAdded chan struct{}
 }
 
 func newFakeClock(now time.Time) *fakeClock {
-	return &fakeClock{now: now}
+	return &fakeClock{now: now, timerAdded: make(chan struct{}, 64)}
 }
 
 func (c *fakeClock) Now() time.Time {
@@ -162,6 +163,7 @@ func (c *fakeClock) After(delay time.Duration) <-chan time.Time {
 	defer c.mu.Unlock()
 	timer := &fakeTimer{at: c.now.Add(delay), ch: make(chan time.Time, 1)}
 	c.timers = append(c.timers, timer)
+	c.timerAdded <- struct{}{}
 	return timer.ch
 }
 
@@ -183,5 +185,14 @@ func (c *fakeClock) Advance(delay time.Duration) {
 
 	for _, timer := range due {
 		timer.ch <- now
+	}
+}
+
+func (c *fakeClock) waitForTimer(t *testing.T) {
+	t.Helper()
+	select {
+	case <-c.timerAdded:
+	case <-time.After(time.Second):
+		t.Fatal("timer was not registered")
 	}
 }

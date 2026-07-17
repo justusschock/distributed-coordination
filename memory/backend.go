@@ -13,6 +13,8 @@ type Backend struct {
 	clock     coordination.Clock
 	records   map[string]*record
 	nextToken map[string]coordination.FencingToken
+	members   map[string]map[string]*memberRecord
+	barriers  map[string]*barrierState
 }
 
 type record struct {
@@ -45,6 +47,8 @@ func NewBackend(clock coordination.Clock) *Backend {
 		clock:     clock,
 		records:   make(map[string]*record),
 		nextToken: make(map[string]coordination.FencingToken),
+		members:   make(map[string]map[string]*memberRecord),
+		barriers:  make(map[string]*barrierState),
 	}
 }
 
