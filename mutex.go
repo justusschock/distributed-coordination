@@ -13,6 +13,7 @@ type Mutex struct {
 	ttl        time.Duration
 	mu         sync.Mutex
 	lease      Lease
+	locking    bool
 }
 
 func NewMutex(backend Backend, key, owner string, ttl time.Duration) (*Mutex, error) {
@@ -24,10 +25,12 @@ func NewMutex(backend Backend, key, owner string, ttl time.Duration) (*Mutex, er
 
 func (m *Mutex) Lock(ctx context.Context) (FencingToken, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.lease != nil {
+	if m.lease != nil || m.locking {
+		m.mu.Unlock()
 		return 0, ErrNotOwner
 	}
+	m.locking = true
+	m.mu.Unlock()
 
 	lease, err := m.backend.Acquire(ctx, AcquireRequest{
 		Key:   m.key,
@@ -35,6 +38,9 @@ func (m *Mutex) Lock(ctx context.Context) (FencingToken, error) {
 		TTL:   m.ttl,
 		Wait:  true,
 	})
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.locking = false
 	if err != nil {
 		return 0, err
 	}

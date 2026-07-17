@@ -3,6 +3,7 @@ package coordination_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -109,5 +110,82 @@ func TestMutexRejectsDuplicateOwnershipOperations(t *testing.T) {
 	}
 	if err := mutex.Unlock(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestMutexRejectsConcurrentLockWhileAcquisitionIsInFlight(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseAcquire := func() { releaseOnce.Do(func() { close(release) }) }
+	defer releaseAcquire()
+	backend := &blockingAcquireBackend{
+		lease:   newTestLease(),
+		started: started,
+		release: release,
+	}
+	mutex, err := coordination.NewMutex(backend, "critical", "owner", time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type lockResult struct {
+		token coordination.FencingToken
+		err   error
+	}
+	first := make(chan lockResult, 1)
+	go func() {
+		token, lockErr := mutex.Lock(context.Background())
+		first <- lockResult{token: token, err: lockErr}
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("first Lock did not enter backend acquisition")
+	}
+
+	secondCtx, cancelSecond := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancelSecond()
+	second := make(chan lockResult, 1)
+	go func() {
+		token, lockErr := mutex.Lock(secondCtx)
+		second <- lockResult{token: token, err: lockErr}
+	}()
+	select {
+	case result := <-second:
+		if result.token != 0 || !errors.Is(result.err, coordination.ErrNotOwner) {
+			t.Fatalf("concurrent Lock() = (%d, %v), want (0, ErrNotOwner)", result.token, result.err)
+		}
+	case <-secondCtx.Done():
+		releaseAcquire()
+		<-first
+		result := <-second
+		t.Fatalf("concurrent Lock waited behind backend acquisition and returned (%d, %v)", result.token, result.err)
+	}
+
+	releaseAcquire()
+	result := <-first
+	if result.err != nil || result.token == 0 {
+		t.Fatalf("first Lock() = (%d, %v)", result.token, result.err)
+	}
+	if err := mutex.Unlock(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type blockingAcquireBackend struct {
+	lease       coordination.Lease
+	started     chan struct{}
+	startedOnce sync.Once
+	release     <-chan struct{}
+}
+
+func (b *blockingAcquireBackend) Acquire(ctx context.Context, _ coordination.AcquireRequest) (coordination.Lease, error) {
+	b.startedOnce.Do(func() { close(b.started) })
+	select {
+	case <-b.release:
+		return b.lease, nil
+	case <-ctx.Done():
+		return nil, context.Cause(ctx)
 	}
 }
