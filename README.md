@@ -6,7 +6,7 @@ The module provides fenced leases, cancellation-safe acquisition, mutexes, leade
 
 ## Requirements
 
-- Go 1.26 or newer
+- Go 1.22 or newer
 - Read access to the private `github.com/justusschock` modules
 
 ## Installation
@@ -21,7 +21,7 @@ go env -w 'GONOSUMDB=github.com/justusschock/*'
 Ensure Git can authenticate to GitHub, then add the release:
 
 ```bash
-go get github.com/justusschock/go-distributed-coordination@v0.1.0
+go get github.com/justusschock/go-distributed-coordination@v0.2.0
 ```
 
 The only non-standard-library dependency is [`github.com/justusschock/go-concurrency`](https://github.com/justusschock/go-concurrency), used by asynchronous keepalive handling.
