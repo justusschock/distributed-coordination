@@ -11,6 +11,7 @@ func KeepAlive(ctx context.Context, lease Lease, ttl time.Duration) (*concurrenc
 	if lease == nil || ttl <= 0 {
 		return nil, ErrInvalidRequest
 	}
+	interval := keepAliveInterval(ttl)
 
 	future := concurrency.Go(ctx, func(ctx context.Context) (LeaseInfo, error) {
 		latest := lease.Info()
@@ -29,7 +30,7 @@ func KeepAlive(ctx context.Context, lease Lease, ttl time.Duration) (*concurrenc
 			}
 			latest = info
 
-			timer := time.NewTimer(ttl / 3)
+			timer := time.NewTimer(interval)
 			select {
 			case <-ctx.Done():
 				stopTimer(timer)
@@ -42,6 +43,14 @@ func KeepAlive(ctx context.Context, lease Lease, ttl time.Duration) (*concurrenc
 		}
 	})
 	return future, nil
+}
+
+func keepAliveInterval(ttl time.Duration) time.Duration {
+	interval := ttl / 3
+	if interval == 0 {
+		return time.Nanosecond
+	}
+	return interval
 }
 
 func stopTimer(timer *time.Timer) {
