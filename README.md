@@ -149,7 +149,7 @@ defer membership.Leave(context.Background())
 members, err := backend.List(ctx, "workers")
 ```
 
-`List` returns members sorted by ID. `MemberInfo`, list results, and input metadata do not share mutable maps with backend state. A duplicate active group/ID returns `ErrNotAcquired`; expiry closes `Membership.Done`, and stale renewal or leave returns `ErrLeaseLost`.
+`List` returns members sorted by ID. `MemberInfo`, list results, and input metadata do not share mutable maps with backend state. A duplicate active group/ID returns `ErrNotAcquired`; after leave or expiry, the same ID may join again as a fresh membership. Expiry closes `Membership.Done`, and stale renewal or leave returns `ErrLeaseLost`.
 
 ## Reusable barriers
 
