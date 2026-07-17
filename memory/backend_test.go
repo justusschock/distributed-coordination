@@ -136,6 +136,39 @@ func TestBackendLostLeaseCannotRenewOrRelease(t *testing.T) {
 	}
 }
 
+func TestBackendWaitingAcquisitionHonorsCancellation(t *testing.T) {
+	clock := newFakeClock(time.Unix(100, 0))
+	backend := NewBackend(clock)
+	first, err := backend.Acquire(context.Background(), coordination.AcquireRequest{
+		Key: "key", Owner: "one", TTL: time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = first.Release(context.Background()) })
+	clock.waitForTimer(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() {
+		_, acquireErr := backend.Acquire(ctx, coordination.AcquireRequest{
+			Key: "key", Owner: "two", TTL: time.Minute, Wait: true,
+		})
+		result <- acquireErr
+	}()
+	clock.waitForTimer(t)
+	cancel()
+
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("waiting Acquire() error = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("waiting Acquire did not return after cancellation")
+	}
+}
+
 type fakeTimer struct {
 	at time.Time
 	ch chan time.Time
