@@ -124,9 +124,6 @@ func TestBarrierPrunesExpiredArrivalBeforeDelayedTimerDelivery(t *testing.T) {
 	current := waitForBarrierContext(backend, ctx, coordination.BarrierRequest{
 		Name: "deploy", Participant: "current", Parties: 2, TTL: time.Minute,
 	})
-	if err := receiveBarrierError(t, expired); !errors.Is(err, coordination.ErrNotAcquired) {
-		t.Fatalf("expired Wait() error = %v, want ErrNotAcquired", err)
-	}
 	clock.waitForTimer(t)
 	select {
 	case result := <-current:
@@ -140,6 +137,31 @@ func TestBarrierPrunesExpiredArrivalBeforeDelayedTimerDelivery(t *testing.T) {
 	for _, result := range []coordination.BarrierResult{receiveBarrier(t, current), receiveBarrier(t, last)} {
 		if !reflect.DeepEqual(result.Participants, []string{"current", "last"}) {
 			t.Fatalf("participants = %v, want [current last]", result.Participants)
+		}
+	}
+	if err := receiveBarrierError(t, expired); !errors.Is(err, coordination.ErrNotAcquired) {
+		t.Fatalf("expired Wait() error after generation completion = %v, want ErrNotAcquired", err)
+	}
+}
+
+func TestBarrierExpiredArrivalWinsWhenCompletionIsAlsoReady(t *testing.T) {
+	backend := NewBackend(nil)
+	generation := newBarrierGeneration(1)
+	arrival := &barrierArrival{
+		participant: "expired",
+		expired:     make(chan struct{}),
+	}
+	close(arrival.expired)
+	generation.completed = true
+	generation.result = coordination.BarrierResult{
+		Name: "deploy", Generation: 1, Participants: []string{"current", "last"},
+	}
+	close(generation.done)
+
+	for range 1_000 {
+		result, err := backend.awaitBarrier(context.Background(), generation, arrival, make(<-chan time.Time))
+		if !errors.Is(err, coordination.ErrNotAcquired) {
+			t.Fatalf("awaitBarrier() = (%+v, %v), want ErrNotAcquired", result, err)
 		}
 	}
 }

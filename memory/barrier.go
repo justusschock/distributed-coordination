@@ -82,10 +82,13 @@ func (b *Backend) Wait(ctx context.Context, request coordination.BarrierRequest)
 
 	expiry := b.clock.After(arrival.expiresAt.Sub(now))
 	b.mu.Unlock()
+	return b.awaitBarrier(ctx, generation, arrival, expiry)
+}
 
+func (b *Backend) awaitBarrier(ctx context.Context, generation *barrierGeneration, arrival *barrierArrival, expiry <-chan time.Time) (coordination.BarrierResult, error) {
 	select {
 	case <-generation.done:
-		return copyBarrierResult(generation.result), nil
+		return b.completedBarrierResult(generation, arrival)
 	case <-arrival.expired:
 		return coordination.BarrierResult{}, coordination.ErrNotAcquired
 	case <-ctx.Done():
@@ -117,11 +120,11 @@ func newBarrierGeneration(number uint64) *barrierGeneration {
 func (b *Backend) withdrawBarrierArrival(generation *barrierGeneration, arrival *barrierArrival) (coordination.BarrierResult, bool, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if generation.completed {
-		return copyBarrierResult(generation.result), true, false
-	}
 	if !arrival.active {
 		return coordination.BarrierResult{}, false, true
+	}
+	if generation.completed {
+		return copyBarrierResult(generation.result), true, false
 	}
 	b.removeBarrierArrivalLocked(generation, arrival, false)
 	return coordination.BarrierResult{}, false, false
@@ -130,11 +133,23 @@ func (b *Backend) withdrawBarrierArrival(generation *barrierGeneration, arrival 
 func (b *Backend) expireBarrierArrival(generation *barrierGeneration, arrival *barrierArrival) (coordination.BarrierResult, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if !arrival.active {
+		return coordination.BarrierResult{}, false
+	}
 	if generation.completed {
 		return copyBarrierResult(generation.result), true
 	}
 	b.removeBarrierArrivalLocked(generation, arrival, true)
 	return coordination.BarrierResult{}, false
+}
+
+func (b *Backend) completedBarrierResult(generation *barrierGeneration, arrival *barrierArrival) (coordination.BarrierResult, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if !arrival.active {
+		return coordination.BarrierResult{}, coordination.ErrNotAcquired
+	}
+	return copyBarrierResult(generation.result), nil
 }
 
 func (b *Backend) pruneBarrierArrivalsLocked(generation *barrierGeneration, now time.Time) {
