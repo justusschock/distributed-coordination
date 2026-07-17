@@ -14,8 +14,8 @@ The module provides fenced leases, cancellation-safe acquisition, mutexes, leade
 Configure the private module namespace once:
 
 ```bash
-go env -w GOPRIVATE=github.com/justusschock/*
-go env -w GONOSUMDB=github.com/justusschock/*
+go env -w 'GOPRIVATE=github.com/justusschock/*'
+go env -w 'GONOSUMDB=github.com/justusschock/*'
 ```
 
 Ensure Git can authenticate to GitHub, then add the release:
@@ -104,7 +104,7 @@ defer mutex.Unlock(context.Background())
 return store.Write(ctx, token, []byte("closed"))
 ```
 
-One `Mutex` value represents one owner and may hold at most one lease. Duplicate `Lock` or `Unlock` operations return `ErrNotOwner`. The helper does not renew its lease automatically; choose a TTL that bounds the operation or use a raw lease with `KeepAlive` when explicit lifetime observation is required.
+One `Mutex` value represents one owner and may hold at most one lease. Duplicate `Lock` calls, including a call made while that value is still acquiring, return `ErrNotOwner` promptly; `Unlock` without an active lease does the same. The helper does not renew its lease automatically; choose a TTL that bounds the operation or use a raw lease with `KeepAlive` when explicit lifetime observation is required.
 
 ## Leader election
 
@@ -168,7 +168,7 @@ if err != nil {
 fmt.Printf("generation %d: %v\n", result.Generation, result.Participants)
 ```
 
-Within a backend, the first wait fixes the party count for a barrier name; a different count returns `ErrInvalidRequest`. A participant is counted once per generation even if it has concurrent waiters. Exactly `Parties` unique participants complete the generation for every waiter, after which the next generation starts empty. Cancellation removes an arrival from an incomplete generation. TTL expiry does the same and returns `ErrNotAcquired`.
+Within a backend, the first wait fixes the party count for a barrier name; a different count returns `ErrInvalidRequest`. A participant is counted once per generation even if it has concurrent waiters. Exactly `Parties` unique, unexpired participants complete the generation for every active waiter, after which the next generation starts empty. Cancellation removes an arrival from an incomplete generation. TTL expiry does the same and returns `ErrNotAcquired`; absolute deadlines are pruned before completion even when timer delivery is delayed.
 
 ## Packages and API
 
