@@ -51,7 +51,9 @@ jobs:
         run: go mod verify
 
       - name: Verify module metadata
-        run: go mod tidy -diff
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
 
       - name: List module graph
         run: go list -m all
