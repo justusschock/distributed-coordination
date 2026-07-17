@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"sort"
+	"time"
 
 	coordination "github.com/justusschock/go-distributed-coordination"
 )
@@ -13,11 +14,19 @@ type barrierState struct {
 }
 
 type barrierGeneration struct {
-	number    uint64
-	arrivals  map[string]int
-	done      chan struct{}
-	completed bool
-	result    coordination.BarrierResult
+	number       uint64
+	arrivals     map[*barrierArrival]struct{}
+	participants map[string]int
+	done         chan struct{}
+	completed    bool
+	result       coordination.BarrierResult
+}
+
+type barrierArrival struct {
+	participant string
+	expiresAt   time.Time
+	expired     chan struct{}
+	active      bool
 }
 
 func (b *Backend) Wait(ctx context.Context, request coordination.BarrierRequest) (coordination.BarrierResult, error) {
@@ -42,10 +51,19 @@ func (b *Backend) Wait(ctx context.Context, request coordination.BarrierRequest)
 	}
 
 	generation := state.current
-	generation.arrivals[request.Participant]++
-	if len(generation.arrivals) == state.parties {
-		participants := make([]string, 0, len(generation.arrivals))
-		for participant := range generation.arrivals {
+	now := b.clock.Now()
+	b.pruneBarrierArrivalsLocked(generation, now)
+	arrival := &barrierArrival{
+		participant: request.Participant,
+		expiresAt:   now.Add(request.TTL),
+		expired:     make(chan struct{}),
+		active:      true,
+	}
+	generation.arrivals[arrival] = struct{}{}
+	generation.participants[request.Participant]++
+	if len(generation.participants) == state.parties {
+		participants := make([]string, 0, len(generation.participants))
+		for participant := range generation.participants {
 			participants = append(participants, participant)
 		}
 		sort.Strings(participants)
@@ -62,19 +80,25 @@ func (b *Backend) Wait(ctx context.Context, request coordination.BarrierRequest)
 		return result, nil
 	}
 
-	expiry := b.clock.After(request.TTL)
+	expiry := b.clock.After(arrival.expiresAt.Sub(now))
 	b.mu.Unlock()
 
 	select {
 	case <-generation.done:
 		return copyBarrierResult(generation.result), nil
+	case <-arrival.expired:
+		return coordination.BarrierResult{}, coordination.ErrNotAcquired
 	case <-ctx.Done():
-		if result, completed := b.withdrawBarrierArrival(generation, request.Participant); completed {
+		result, completed, expired := b.withdrawBarrierArrival(generation, arrival)
+		if completed {
 			return result, nil
+		}
+		if expired {
+			return coordination.BarrierResult{}, coordination.ErrNotAcquired
 		}
 		return coordination.BarrierResult{}, context.Cause(ctx)
 	case <-expiry:
-		if result, completed := b.withdrawBarrierArrival(generation, request.Participant); completed {
+		if result, completed := b.expireBarrierArrival(generation, arrival); completed {
 			return result, nil
 		}
 		return coordination.BarrierResult{}, coordination.ErrNotAcquired
@@ -83,24 +107,58 @@ func (b *Backend) Wait(ctx context.Context, request coordination.BarrierRequest)
 
 func newBarrierGeneration(number uint64) *barrierGeneration {
 	return &barrierGeneration{
-		number:   number,
-		arrivals: make(map[string]int),
-		done:     make(chan struct{}),
+		number:       number,
+		arrivals:     make(map[*barrierArrival]struct{}),
+		participants: make(map[string]int),
+		done:         make(chan struct{}),
 	}
 }
 
-func (b *Backend) withdrawBarrierArrival(generation *barrierGeneration, participant string) (coordination.BarrierResult, bool) {
+func (b *Backend) withdrawBarrierArrival(generation *barrierGeneration, arrival *barrierArrival) (coordination.BarrierResult, bool, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if generation.completed {
+		return copyBarrierResult(generation.result), true, false
+	}
+	if !arrival.active {
+		return coordination.BarrierResult{}, false, true
+	}
+	b.removeBarrierArrivalLocked(generation, arrival, false)
+	return coordination.BarrierResult{}, false, false
+}
+
+func (b *Backend) expireBarrierArrival(generation *barrierGeneration, arrival *barrierArrival) (coordination.BarrierResult, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if generation.completed {
 		return copyBarrierResult(generation.result), true
 	}
-	if generation.arrivals[participant] <= 1 {
-		delete(generation.arrivals, participant)
-	} else {
-		generation.arrivals[participant]--
-	}
+	b.removeBarrierArrivalLocked(generation, arrival, true)
 	return coordination.BarrierResult{}, false
+}
+
+func (b *Backend) pruneBarrierArrivalsLocked(generation *barrierGeneration, now time.Time) {
+	for arrival := range generation.arrivals {
+		if !arrival.expiresAt.After(now) {
+			b.removeBarrierArrivalLocked(generation, arrival, true)
+		}
+	}
+}
+
+func (b *Backend) removeBarrierArrivalLocked(generation *barrierGeneration, arrival *barrierArrival, expired bool) {
+	if !arrival.active {
+		return
+	}
+	arrival.active = false
+	delete(generation.arrivals, arrival)
+	if generation.participants[arrival.participant] <= 1 {
+		delete(generation.participants, arrival.participant)
+	} else {
+		generation.participants[arrival.participant]--
+	}
+	if expired {
+		close(arrival.expired)
+	}
 }
 
 func copyBarrierResult(result coordination.BarrierResult) coordination.BarrierResult {

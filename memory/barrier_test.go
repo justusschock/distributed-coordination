@@ -109,6 +109,41 @@ func TestBarrierTTLRemovesUncompletedArrival(t *testing.T) {
 	}
 }
 
+func TestBarrierPrunesExpiredArrivalBeforeDelayedTimerDelivery(t *testing.T) {
+	clock := newFakeClock(time.Unix(100, 0))
+	backend := NewBackend(clock)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	expired := waitForBarrierContext(backend, ctx, coordination.BarrierRequest{
+		Name: "deploy", Participant: "expired", Parties: 2, TTL: time.Second,
+	})
+	clock.waitForTimer(t)
+	clock.elapseWithoutFiring(time.Second)
+
+	current := waitForBarrierContext(backend, ctx, coordination.BarrierRequest{
+		Name: "deploy", Participant: "current", Parties: 2, TTL: time.Minute,
+	})
+	if err := receiveBarrierError(t, expired); !errors.Is(err, coordination.ErrNotAcquired) {
+		t.Fatalf("expired Wait() error = %v, want ErrNotAcquired", err)
+	}
+	clock.waitForTimer(t)
+	select {
+	case result := <-current:
+		t.Fatalf("barrier completed with expired arrival: %+v", result)
+	default:
+	}
+
+	last := waitForBarrierContext(backend, ctx, coordination.BarrierRequest{
+		Name: "deploy", Participant: "last", Parties: 2, TTL: time.Minute,
+	})
+	for _, result := range []coordination.BarrierResult{receiveBarrier(t, current), receiveBarrier(t, last)} {
+		if !reflect.DeepEqual(result.Participants, []string{"current", "last"}) {
+			t.Fatalf("participants = %v, want [current last]", result.Participants)
+		}
+	}
+}
+
 type barrierOutcome struct {
 	result coordination.BarrierResult
 	err    error
