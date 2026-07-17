@@ -113,3 +113,35 @@ func TestMembershipRenewExtendsLifetime(t *testing.T) {
 		t.Fatal("membership did not expire at renewed deadline")
 	}
 }
+
+func TestMembershipCanRejoinExpiredRecordBeforeTimerDelivery(t *testing.T) {
+	clock := newFakeClock(time.Unix(100, 0))
+	backend := NewBackend(clock)
+	first, err := backend.Join(context.Background(), coordination.Member{Group: "workers", ID: "a"}, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	clock.elapseWithoutFiring(time.Second)
+	second, err := backend.Join(context.Background(), coordination.Member{Group: "workers", ID: "a"}, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = second.Leave(context.Background()) })
+
+	select {
+	case <-first.Done():
+	case <-time.After(time.Second):
+		t.Fatal("replaced membership did not lose ownership")
+	}
+	members, err := backend.List(context.Background(), "workers")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(members) != 1 || members[0].Member.ID != "a" {
+		t.Fatalf("members after rejoin = %+v, want member a", members)
+	}
+	if _, err := second.Renew(context.Background(), time.Second); err != nil {
+		t.Fatalf("rejoined membership Renew() error = %v", err)
+	}
+}

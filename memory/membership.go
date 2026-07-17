@@ -55,6 +55,7 @@ func (b *Backend) Join(ctx context.Context, member coordination.Member, ttl time
 		done: make(chan struct{}),
 	}
 	group[member.ID] = current
+	b.members[member.Group] = group
 	b.mu.Unlock()
 
 	b.scheduleMemberExpiry(current, ttl)

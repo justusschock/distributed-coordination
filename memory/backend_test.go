@@ -188,6 +188,12 @@ func (c *fakeClock) Advance(delay time.Duration) {
 	}
 }
 
+func (c *fakeClock) elapseWithoutFiring(delay time.Duration) {
+	c.mu.Lock()
+	c.now = c.now.Add(delay)
+	c.mu.Unlock()
+}
+
 func (c *fakeClock) waitForTimer(t *testing.T) {
 	t.Helper()
 	select {
