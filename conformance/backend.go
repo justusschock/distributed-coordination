@@ -114,7 +114,7 @@ func Run(t *testing.T, factory Factory) {
 		waitForClosure(t, second.Done(), "second lease")
 		third := acquire(t, backend, "conformance/fencing", "three", time.Second, false)
 		t.Cleanup(func() { _ = third.Release(context.Background()) })
-		if !(first.Info().Token < second.Info().Token && second.Info().Token < third.Info().Token) {
+		if first.Info().Token >= second.Info().Token || second.Info().Token >= third.Info().Token {
 			t.Fatalf("tokens = %d, %d, %d, want strictly increasing", first.Info().Token, second.Info().Token, third.Info().Token)
 		}
 	})

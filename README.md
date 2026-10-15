@@ -1,12 +1,12 @@
 # go-distributed-coordination
 
-Backend-neutral distributed-coordination contracts and a deterministic in-memory reference backend for Go.
+Backend-neutral distributed-coordination contracts, a deterministic in-memory reference backend, and a cross-process local-filesystem backend for Go.
 
 The module provides fenced leases, cancellation-safe acquisition, mutexes, leader election, expiring membership, reusable barriers, and a conformance suite for backend adapters. It is independent of any product resource model.
 
 ## Requirements
 
-- Go 1.22 or newer
+- Go 1.25 or newer
 - Read access to the private `github.com/justusschock` modules
 
 ## Installation
@@ -21,10 +21,10 @@ go env -w 'GONOSUMDB=github.com/justusschock/*'
 Ensure Git can authenticate to GitHub, then add the release:
 
 ```bash
-go get github.com/justusschock/go-distributed-coordination@v0.2.0
+go get github.com/justusschock/go-distributed-coordination@v0.3.0
 ```
 
-The only non-standard-library dependency is [`github.com/justusschock/go-concurrency`](https://github.com/justusschock/go-concurrency), used by asynchronous keepalive handling.
+The non-standard-library dependencies are [`github.com/justusschock/go-concurrency`](https://github.com/justusschock/go-concurrency), used by asynchronous keepalive handling, and [`golang.org/x/sys`](https://pkg.go.dev/golang.org/x/sys), used by the file backend for operating-system locks.
 
 ## Fenced leases
 
@@ -170,6 +170,57 @@ fmt.Printf("generation %d: %v\n", result.Generation, result.Participants)
 
 Within a backend, the first wait fixes the party count for a barrier name; a different count returns `ErrInvalidRequest`. A participant is counted once per generation even if it has concurrent waiters. Exactly `Parties` unique, unexpired participants complete the generation for every active waiter, after which the next generation starts empty. Cancellation removes an arrival from an incomplete generation. TTL expiry does the same and returns `ErrNotAcquired`; absolute deadlines are pruned before completion even when timer delivery is delayed.
 
+## File backend
+
+Package `file` coordinates separate processes on one machine through lock files in a local directory. It implements `coordination.Backend`, so `Mutex`, `Campaign`, `KeepAlive`, and the conformance suite work unchanged.
+
+```go
+backend, err := file.NewBackend(".dtc/locks")
+if err != nil {
+	return err
+}
+
+lease, err := backend.Acquire(ctx, coordination.AcquireRequest{
+	Key:   "repo",
+	Owner: fmt.Sprintf("pid-%d", os.Getpid()),
+	TTL:   time.Minute,
+	Wait:  true,
+})
+if err != nil {
+	return err
+}
+defer lease.Release(context.Background())
+```
+
+`file.NewBackend(dir, opts...)` creates `dir` if needed and accepts these options:
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `WithClock(clock)` | real clock | Clock for lease timestamps and expiry. |
+| `WithPollInterval(d)` | `100ms` | Maximum real-time delay between attempts of a waiting acquisition. Attempts start at `d/16` and back off exponentially with jitter. |
+| `WithFileMode(mode)` | `0644` | Permission bits for created lock and state files; must include owner read and write. A created directory receives matching execute bits. |
+
+Each key maps to a flat pair of files named by a lowercase, filesystem-safe prefix of the key and the SHA-256 of the exact key, so keys may contain `/` or any other character and remain distinct on case-insensitive filesystems:
+
+- `<name>.lock` is the target of an exclusive operating-system advisory lock: `flock` on Linux, macOS, and the BSDs, and `LockFileEx` on Windows. Every lease handle opens its own descriptor, so separate processes, separate `Backend` values, and separate leases in one process all exclude each other. Other platforms return `errors.ErrUnsupported` from `NewBackend`.
+- `<name>.state` is JSON holding the key, owner, fencing token, acquisition time, and expiry deadline of the latest lease. It is written only while holding the lock, through a synced temporary file and an atomic rename, and is updated on every acquisition and renewal.
+
+Guarantees:
+
+- **Mutual exclusion.** A lease exists only while its handle holds the operating-system lock.
+- **Crash release.** The operating system drops the lock when the holding process exits or is killed, so the next waiter acquires without waiting for the TTL.
+- **Expiry.** The holding process closes `Done`, releases the lock, and returns `ErrLeaseLost` from `Renew` and `Release` once the TTL lapses without renewal. Waiters in the same `Backend` wake immediately; others notice at their next poll.
+- **Fencing.** Tokens are read from and persisted to the state file under the lock, so they increase strictly per key across processes and restarts. Lock and state files are never deleted, so tokens survive release. A corrupt or foreign state file fails acquisition instead of resetting the token.
+- **Identity.** If the lock file is removed or replaced while held, `Renew` and `Release` report `ErrLeaseLost`, and acquisition never holds a lock on an unlinked file.
+
+Limits:
+
+- Locks are advisory. Only processes using this backend on the same directory are excluded; other tools can still read or write protected data.
+- Expiry is enforced by the holder. Another process cannot preempt a holder that is alive but suspended (for example stopped or paused); the lock is released when the holder resumes and observes the deadline, or when it exits. Use fencing tokens at the protected resource to reject writes from such a holder.
+- Use a local filesystem. `flock` on NFS and other network filesystems is either emulated with byte-range locks or local to one client depending on the server and client, and SMB share semantics vary, so exclusion across machines is not guaranteed. The backend coordinates processes on one host.
+- Lock descriptors are close-on-exec, so child processes do not inherit leases.
+- One lock and one state file remain per key ever used. Choose a bounded key space or remove the directory when no process uses it.
+
 ## Packages and API
 
 ### Root package `coordination`
@@ -184,6 +235,10 @@ Within a backend, the first wait fixes the party count for a barrier name; a dif
 ### Package `memory`
 
 `memory.NewBackend(clock)` returns the synchronized reference backend. Pass `nil` for the real clock or inject a `coordination.Clock` for deterministic tests. The backend implements `coordination.Backend`, `coordination.Registry`, and `coordination.Barrier`.
+
+### Package `file`
+
+`file.NewBackend(dir, opts...)` returns a cross-process backend over a local directory, configured by `WithClock`, `WithPollInterval`, and `WithFileMode`. The backend implements `coordination.Backend`.
 
 ### Package `conformance`
 
@@ -216,9 +271,9 @@ Canceled operations return their context error or cancellation cause directly.
 
 ## Correctness boundary
 
-The in-memory backend is deterministic, synchronized, and useful for tests and single-process coordination. It is not a distributed store and cannot coordinate separate processes or survive process restarts. Production adapters must provide atomic acquisition, durable monotonically increasing per-key tokens, expiry, and record-identity checks with the same observable semantics.
+The in-memory backend is deterministic, synchronized, and useful for tests and single-process coordination. It is not a distributed store and cannot coordinate separate processes or survive process restarts. The file backend coordinates processes on one host and persists fencing tokens, but it is not a distributed store either. Production adapters must provide atomic acquisition, durable monotonically increasing per-key tokens, expiry, and record-identity checks with the same observable semantics.
 
-This initial release intentionally does not include adapters for etcd, Consul, ZooKeeper, SQL, Redis, Kubernetes, or network services. It also does not provide distributed transactions, scheduling, resource selection, work queues, or protected-storage fencing enforcement.
+The module intentionally does not include adapters for etcd, Consul, ZooKeeper, SQL, Redis, Kubernetes, or network services. It also does not provide distributed transactions, scheduling, resource selection, work queues, or protected-storage fencing enforcement.
 
 ## Development
 
@@ -235,6 +290,8 @@ Run ownership-sensitive tests repeatedly when changing timing or state transitio
 ```bash
 go test -race -count=20 -run 'Fencing|Mutex|Campaign|Barrier' ./...
 ```
+
+Time-dependent file-backend tests run in `testing/synctest` bubbles. Cross-process tests re-execute the test binary as helper processes and use real time.
 
 Local implementation plans under `docs/` are deliberately excluded from Git.
 

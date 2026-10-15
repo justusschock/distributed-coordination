@@ -7,6 +7,7 @@ import (
 
 	coordination "github.com/justusschock/go-distributed-coordination"
 	"github.com/justusschock/go-distributed-coordination/conformance"
+	"github.com/justusschock/go-distributed-coordination/file"
 	"github.com/justusschock/go-distributed-coordination/memory"
 )
 
@@ -15,6 +16,18 @@ func TestMemoryBackend(t *testing.T) {
 		t.Helper()
 		clock := newFakeClock(time.Unix(100, 0))
 		return memory.NewBackend(clock), clock.Advance
+	})
+}
+
+func TestFileBackend(t *testing.T) {
+	conformance.Run(t, func(t *testing.T) (coordination.Backend, func(time.Duration)) {
+		t.Helper()
+		clock := newFakeClock(time.Unix(100, 0))
+		backend, err := file.NewBackend(t.TempDir(), file.WithClock(clock))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return backend, clock.Advance
 	})
 }
 

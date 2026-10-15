@@ -17,9 +17,6 @@ jobs:
       fail-fast: false
       matrix:
         go-version:
-          - '1.22.x'
-          - '1.23.x'
-          - '1.24.x'
           - '1.25.x'
           - '1.26.x'
 
@@ -63,3 +60,38 @@ jobs:
 
       - name: Test with race detector
         run: go test -race ./...
+
+  platforms:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
+
+    env:
+      GOPRIVATE: github.com/justusschock/*
+      GONOSUMDB: github.com/justusschock/*
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.x'
+          cache-dependency-path: go.sum
+
+      - name: Configure private module access
+        shell: bash
+        env:
+          GO_MODULES_TOKEN: ${{ secrets.GO_MODULES_TOKEN }}
+        run: |
+          test -n "$GO_MODULES_TOKEN"
+          git config --global url."https://x-access-token:${GO_MODULES_TOKEN}@github.com/".insteadOf "https://github.com/"
+
+      - name: Test file backend and conformance
+        run: go test -race ./file/... ./conformance/...
