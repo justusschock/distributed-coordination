@@ -1,57 +1,41 @@
 # Changelog
 
-All notable changes to this project are documented in this file. The
-format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/).
-While the major version is 0, minor releases may contain breaking changes;
-they are listed here.
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+While the major version is `0`, a minor release may break the API.
 
 ## [Unreleased]
 
-Preparation for the first public release.
+## [0.1.0] - 2026-10-18
 
-### Removed
-
-- **Breaking:** `coordination.ErrClosed`. It was reserved and never
-  returned by any code in this module ([ADR-0009](docs/adr/0009-public-api-boundary.md)).
-
-### Changed
-
-- The minimum Go version stays 1.25, now documented as the floor required
-  by `testing/synctest`; CI tests Go 1.25, oldstable and stable ([ADR-0010](docs/adr/0010-supported-go-versions.md)).
-- Time-dependent tests run in `testing/synctest` bubbles instead of on
-  wall-clock time or a hand-rolled manual clock.
-- CI pins actions to commit SHAs, adds golangci-lint and no longer needs
-  private-module credentials; Dependabot keeps modules and actions current.
+First public release.
 
 ### Added
 
-- Doc comments for every exported identifier and runnable examples for
-  every public entry point.
-- `docs/` with the retrospective PRD and ADRs, `AGENTS.md`, `NOTICE` and
-  this changelog.
+- Backend-neutral contracts: `Backend`, `Lease`, `Registry`, `Membership`,
+  `Barrier` and `Clock`.
+- Fenced leases: `Backend.Acquire` grants exclusive, expiring ownership of a
+  key with a `FencingToken` that strictly increases per key, plus `Renew`
+  and `Release`.
+- `KeepAlive`: renews a lease every `ttl/3` and reports cancellation, loss
+  or renewal errors through a `concurrency` future.
+- `NewMutex` and `Campaign`: a fenced mutex and leader election over any
+  `Backend`, with `Leadership.Resign` and a `Lost` channel.
+- Expiring group membership (`Registry`) with metadata, and reusable
+  barriers (`Barrier`) with generations.
+- Package `memory`: a deterministic in-process reference backend that
+  implements every contract.
+- Package `file`: a cross-process backend over operating-system locks in a
+  local directory, with crash release and persistent fencing tokens.
+- Package `conformance`: `Run`, the test suite every `Backend`
+  implementation must pass.
+- Sentinel errors `ErrInvalidRequest`, `ErrNotAcquired`, `ErrLeaseLost` and
+  `ErrNotOwner`.
+- Requirements and architecture decision records under `docs/`.
 
-## [0.3.0] - 2026-10-15
+Requires Go 1.25 or newer.
 
-### Added
-
-- Package `file`: a cross-process backend over lock files in a local
-  directory, with persistent fencing tokens and crash release.
-
-### Changed
-
-- The minimum Go version is 1.25.
-
-## [0.2.0] - 2026-07-17
-
-### Changed
-
-- The minimum Go version is 1.22; the module depends on
-  `concurrency` v0.2.0.
-
-## [0.1.0] - 2026-07-17
-
-### Added
-
-- Fenced lease contracts, `KeepAlive`, `Mutex`, `Campaign`, membership and
-  barrier contracts, the `memory` backend and the `conformance` suite.
+[Unreleased]: https://github.com/justusschock/distributed-coordination/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/justusschock/distributed-coordination/releases/tag/v0.1.0
