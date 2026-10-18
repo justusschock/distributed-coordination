@@ -1,3 +1,12 @@
+// Package memory provides a synchronized, in-process reference
+// implementation of the coordination contracts.
+//
+// [Backend] implements [coordination.Backend], [coordination.Registry] and
+// [coordination.Barrier]. It is deterministic under an injected
+// [coordination.Clock] (or inside a testing/synctest bubble with the real
+// clock), which makes it suitable for tests and for coordinating goroutines
+// of one process. It does not coordinate separate processes and keeps no
+// state across restarts.
 package memory
 
 import (
@@ -8,6 +17,11 @@ import (
 	coordination "github.com/justusschock/go-distributed-coordination"
 )
 
+// Backend is the in-memory reference backend. Its zero value is not usable;
+// create one with [NewBackend]. A Backend is safe for concurrent use.
+//
+// Fencing tokens start at 1 per key and survive release and expiry for the
+// lifetime of the Backend.
 type Backend struct {
 	mu        sync.Mutex
 	clock     coordination.Clock
@@ -39,6 +53,8 @@ func (realClock) After(delay time.Duration) <-chan time.Time {
 	return time.After(delay)
 }
 
+// NewBackend returns an empty Backend that reads time from clock. A nil clock
+// selects the real clock.
 func NewBackend(clock coordination.Clock) *Backend {
 	if clock == nil {
 		clock = realClock{}
@@ -52,6 +68,8 @@ func NewBackend(clock coordination.Clock) *Backend {
 	}
 }
 
+// Acquire implements [coordination.Backend]. A waiting acquisition wakes on
+// release or at the holder's deadline and honours ctx.
 func (b *Backend) Acquire(ctx context.Context, request coordination.AcquireRequest) (coordination.Lease, error) {
 	if request.Key == "" || request.Owner == "" || request.TTL <= 0 {
 		return nil, coordination.ErrInvalidRequest

@@ -19,6 +19,8 @@ type membership struct {
 	record  *memberRecord
 }
 
+// Join implements [coordination.Registry]. Member metadata is copied on the
+// way in and on every read.
 func (b *Backend) Join(ctx context.Context, member coordination.Member, ttl time.Duration) (coordination.Membership, error) {
 	if member.Group == "" || member.ID == "" || ttl <= 0 {
 		return nil, coordination.ErrInvalidRequest
@@ -62,6 +64,8 @@ func (b *Backend) Join(ctx context.Context, member coordination.Member, ttl time
 	return &membership{backend: b, record: current}, nil
 }
 
+// List implements [coordination.Registry]. It returns copies; mutating them
+// does not affect the Backend.
 func (b *Backend) List(ctx context.Context, group string) ([]coordination.MemberInfo, error) {
 	if group == "" {
 		return nil, coordination.ErrInvalidRequest

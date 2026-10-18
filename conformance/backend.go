@@ -1,3 +1,14 @@
+// Package conformance provides the test suite every
+// [coordination.Backend] implementation must pass.
+//
+// Call [Run] from a test of the implementation's package:
+//
+//	func TestBackend(t *testing.T) {
+//		conformance.Run(t, func(t *testing.T) (coordination.Backend, func(time.Duration)) {
+//			clock := newManualClock()
+//			return newBackend(clock), clock.Advance
+//		})
+//	}
 package conformance
 
 import (
@@ -9,8 +20,19 @@ import (
 	coordination "github.com/justusschock/go-distributed-coordination"
 )
 
+// Factory returns a fresh, empty backend for one subtest together with a hook
+// that advances the backend's clock by the given duration and delivers the
+// timers that become due. Register cleanup with t.Cleanup.
 type Factory func(t *testing.T) (coordination.Backend, func(time.Duration))
 
+// Run verifies the lease contract of the backends produced by factory, one
+// subtest per property: immediate contention returns
+// [coordination.ErrNotAcquired]; a waiting acquisition honours cancellation;
+// renewal extends the deadline from the current time; release and expiry
+// close Done; a released lease cannot be renewed after another owner
+// acquires the key ([coordination.ErrLeaseLost]); and fencing tokens strictly
+// increase across release and expiry. Each subtest waits at most one second
+// of real time for asynchronous effects.
 func Run(t *testing.T, factory Factory) {
 	t.Helper()
 

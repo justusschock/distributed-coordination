@@ -29,6 +29,10 @@ type barrierArrival struct {
 	active      bool
 }
 
+// Wait implements [coordination.Barrier]. The first Wait for a name fixes its
+// party count for the lifetime of the Backend. Expired arrivals are pruned
+// by deadline before a generation completes, even when their timer has not
+// fired yet.
 func (b *Backend) Wait(ctx context.Context, request coordination.BarrierRequest) (coordination.BarrierResult, error) {
 	if request.Name == "" || request.Participant == "" || request.Parties <= 0 || request.TTL <= 0 {
 		return coordination.BarrierResult{}, coordination.ErrInvalidRequest

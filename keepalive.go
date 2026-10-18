@@ -7,6 +7,16 @@ import (
 	"github.com/justusschock/go-concurrency"
 )
 
+// KeepAlive renews lease with ttl immediately and then every ttl/3 (at least
+// every nanosecond) on its own goroutine. The returned future resolves with
+// the latest [LeaseInfo] and
+//
+//   - the cancellation cause of ctx when ctx is done,
+//   - [ErrLeaseLost] when lease.Done closes, or
+//   - the first error returned by Renew.
+//
+// Cancel ctx to stop renewing; the lease itself is not released. KeepAlive
+// returns [ErrInvalidRequest] for a nil lease or a non-positive ttl.
 func KeepAlive(ctx context.Context, lease Lease, ttl time.Duration) (*concurrency.Future[LeaseInfo], error) {
 	if lease == nil || ttl <= 0 {
 		return nil, ErrInvalidRequest
