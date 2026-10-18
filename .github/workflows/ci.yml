@@ -2,96 +2,94 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+    tags: ['v*']
   pull_request:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
-    name: Go ${{ matrix.go-version }}
+    name: test (Go ${{ matrix.go-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        go-version:
-          - '1.25.x'
-          - '1.26.x'
-
-    env:
-      GOPRIVATE: github.com/justusschock/*
-      GONOSUMDB: github.com/justusschock/*
-
+        go-version: ['1.25.x', 'oldstable', 'stable']
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ matrix.go-version }}
           cache-dependency-path: go.sum
 
-      - name: Configure private module access
-        env:
-          GO_MODULES_TOKEN: ${{ secrets.GO_MODULES_TOKEN }}
-        run: |
-          test -n "$GO_MODULES_TOKEN"
-          git config --global url."https://x-access-token:${GO_MODULES_TOKEN}@github.com/".insteadOf "https://github.com/"
-
-      - name: Download modules
-        run: go mod download
-
       - name: Verify modules
         run: go mod verify
 
-      - name: Verify module metadata
+      - name: Check module tidiness
         run: |
           go mod tidy
           git diff --exit-code -- go.mod go.sum
-
-      - name: List module graph
-        run: go list -m all
 
       - name: Vet
         run: go vet ./...
 
       - name: Test with race detector
-        run: go test -race ./...
+        run: go test -race -count=1 ./...
 
   platforms:
-    name: ${{ matrix.os }}
+    # The file backend uses flock on Unix and LockFileEx on Windows; run its
+    # tests and the conformance suite on every supported operating system.
+    name: platforms (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - macos-latest
-          - windows-latest
-
-    env:
-      GOPRIVATE: github.com/justusschock/*
-      GONOSUMDB: github.com/justusschock/*
-
+        os: [macos-latest, windows-latest]
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.x'
+          go-version: stable
           cache-dependency-path: go.sum
 
-      - name: Configure private module access
-        shell: bash
-        env:
-          GO_MODULES_TOKEN: ${{ secrets.GO_MODULES_TOKEN }}
-        run: |
-          test -n "$GO_MODULES_TOKEN"
-          git config --global url."https://x-access-token:${GO_MODULES_TOKEN}@github.com/".insteadOf "https://github.com/"
+      - name: Test file backend and conformance suite
+        run: go test -race -count=1 ./file/... ./conformance/...
 
-      - name: Test file backend and conformance
-        run: go test -race ./file/... ./conformance/...
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache-dependency-path: go.sum
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.15.0

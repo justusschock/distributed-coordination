@@ -1,0 +1,19 @@
+version: "2"
+
+linters:
+  # The standard set (errcheck, govet, ineffassign, staticcheck, unused)
+  # plus checks for error wrapping, spelling and unclosed HTTP bodies.
+  default: standard
+  enable:
+    - bodyclose
+    - errorlint
+    - misspell
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/justusschock/go-distributed-coordination
