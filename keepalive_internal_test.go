@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// FR-COORD-06
 func TestKeepAliveIntervalIsAlwaysPositive(t *testing.T) {
 	tests := []struct {
 		ttl  time.Duration

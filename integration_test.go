@@ -11,6 +11,7 @@ import (
 	"github.com/justusschock/go-distributed-coordination/memory"
 )
 
+// FR-COORD-04, FR-COORD-07
 func TestFencedMutexIntegrationRejectsStaleOwnerWrites(t *testing.T) {
 	backend := memory.NewBackend(nil)
 	first, err := coordination.NewMutex(backend, "jobs", "worker-a", time.Minute)
