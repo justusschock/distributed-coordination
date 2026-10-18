@@ -69,6 +69,7 @@ func readState(t *testing.T, dir string) stateRecord {
 	return record
 }
 
+// FR-COORD-16
 func TestNewBackendRejectsInvalidOptions(t *testing.T) {
 	dir := t.TempDir()
 	for name, opts := range map[string][]file.Option{
@@ -86,6 +87,7 @@ func TestNewBackendRejectsInvalidOptions(t *testing.T) {
 	}
 }
 
+// FR-COORD-16
 func TestNewBackendCreatesDirectory(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "nested", "locks")
 	backend := newBackend(t, dir)
@@ -96,6 +98,7 @@ func TestNewBackendCreatesDirectory(t *testing.T) {
 	}
 }
 
+// FR-COORD-01
 func TestBackendRejectsInvalidRequests(t *testing.T) {
 	backend := newBackend(t, t.TempDir())
 	for _, request := range []coordination.AcquireRequest{
@@ -114,6 +117,7 @@ func TestBackendRejectsInvalidRequests(t *testing.T) {
 	}
 }
 
+// FR-COORD-12, FR-COORD-02
 func TestBackendsSharingDirectoryExcludeEachOther(t *testing.T) {
 	dir := t.TempDir()
 	first, second := newBackend(t, dir), newBackend(t, dir)
@@ -133,6 +137,7 @@ func TestBackendsSharingDirectoryExcludeEachOther(t *testing.T) {
 	}
 }
 
+// FR-COORD-13, FR-COORD-04
 func TestFencingTokensPersistAcrossBackends(t *testing.T) {
 	dir := t.TempDir()
 	var last coordination.FencingToken
@@ -152,6 +157,7 @@ func TestFencingTokensPersistAcrossBackends(t *testing.T) {
 	}
 }
 
+// FR-COORD-15
 func TestKeysMapToDistinctFlatFiles(t *testing.T) {
 	dir := t.TempDir()
 	backend := newBackend(t, dir)
@@ -181,6 +187,7 @@ func TestKeysMapToDistinctFlatFiles(t *testing.T) {
 	}
 }
 
+// FR-COORD-13
 func TestCorruptStateIsNotReset(t *testing.T) {
 	dir := t.TempDir()
 	backend := newBackend(t, dir)
@@ -203,6 +210,7 @@ func TestCorruptStateIsNotReset(t *testing.T) {
 	}
 }
 
+// FR-COORD-15
 func TestRemovedLockFileLosesLease(t *testing.T) {
 	dir := t.TempDir()
 	backend := newBackend(t, dir)
@@ -225,6 +233,7 @@ func TestRemovedLockFileLosesLease(t *testing.T) {
 	}
 }
 
+// FR-COORD-14, FR-COORD-05
 func TestLeaseExpiresWithoutRenewal(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		backend := newBackend(t, t.TempDir())
@@ -256,6 +265,7 @@ func TestLeaseExpiresWithoutRenewal(t *testing.T) {
 	})
 }
 
+// FR-COORD-14, FR-COORD-05
 func TestRenewExtendsAndPersistsDeadline(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		dir := t.TempDir()
@@ -292,6 +302,7 @@ func TestRenewExtendsAndPersistsDeadline(t *testing.T) {
 	})
 }
 
+// FR-COORD-14, FR-COORD-03
 func TestWaitingAcquisitionWakesOnLocalRelease(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		backend := newBackend(t, t.TempDir(), file.WithPollInterval(time.Hour))
@@ -334,6 +345,7 @@ func TestWaitingAcquisitionWakesOnLocalRelease(t *testing.T) {
 	})
 }
 
+// FR-COORD-14
 func TestWaitingAcquisitionPollsForOtherHolders(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		dir := t.TempDir()
@@ -376,6 +388,7 @@ func TestWaitingAcquisitionPollsForOtherHolders(t *testing.T) {
 	})
 }
 
+// FR-COORD-03
 func TestWaitingAcquisitionHonorsDeadline(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		dir := t.TempDir()

@@ -11,6 +11,7 @@ import (
 	"github.com/justusschock/go-distributed-coordination/memory"
 )
 
+// FR-COORD-17, FR-COORD-11
 func TestMemoryBackend(t *testing.T) {
 	conformance.Run(t, func(t *testing.T) (coordination.Backend, func(time.Duration)) {
 		t.Helper()
@@ -19,6 +20,7 @@ func TestMemoryBackend(t *testing.T) {
 	})
 }
 
+// FR-COORD-17
 func TestFileBackend(t *testing.T) {
 	conformance.Run(t, func(t *testing.T) (coordination.Backend, func(time.Duration)) {
 		t.Helper()
@@ -31,6 +33,9 @@ func TestFileBackend(t *testing.T) {
 	})
 }
 
+// fakeClock is the manual coordination.Clock behind the Factory's advance
+// hook. These tests cannot use testing/synctest instead: Run creates subtests
+// with t.Run, which is not allowed inside a synctest bubble.
 type fakeTimer struct {
 	at time.Time
 	ch chan time.Time

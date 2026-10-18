@@ -218,6 +218,7 @@ func acquireWithin(t *testing.T, backend coordination.Backend, owner string) coo
 	return lease
 }
 
+// FR-COORD-12
 func TestCrossProcessExclusion(t *testing.T) {
 	dir := t.TempDir()
 	child := startHelper(t, dir, "hold", time.Minute)
@@ -267,6 +268,7 @@ func TestCrossProcessExclusion(t *testing.T) {
 	}
 }
 
+// FR-COORD-12
 func TestCrossProcessCrashReleasesLock(t *testing.T) {
 	dir := t.TempDir()
 	child := startHelper(t, dir, "hold", time.Hour)
@@ -284,6 +286,7 @@ func TestCrossProcessCrashReleasesLock(t *testing.T) {
 	}
 }
 
+// FR-COORD-14
 func TestCrossProcessExpiredHolderLosesLease(t *testing.T) {
 	dir := t.TempDir()
 	child := startHelper(t, dir, "expire", 300*time.Millisecond)
@@ -304,6 +307,7 @@ func TestCrossProcessExpiredHolderLosesLease(t *testing.T) {
 	child.wait(t)
 }
 
+// FR-COORD-12, FR-COORD-13
 func TestCrossProcessMutualExclusion(t *testing.T) {
 	const processes, iterations = 4, 15
 	dir := t.TempDir()
