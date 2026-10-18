@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	coordination "github.com/justusschock/go-distributed-coordination"
+	coordination "github.com/justusschock/distributed-coordination"
 )
 
 // Factory returns a fresh, empty backend for one subtest together with a hook

@@ -1,10 +1,10 @@
 # AGENTS.md
 
-Rules for anyone, human or agent, changing go-distributed-coordination.
+Rules for anyone, human or agent, changing distributed-coordination.
 They are binding. If a change has to break one, say so in the pull request
 and, where it is a design decision, record it in an ADR.
 
-go-distributed-coordination is a Go library of backend-neutral coordination
+distributed-coordination is a Go library of backend-neutral coordination
 contracts (fenced leases, keepalive, mutexes, leader election, membership,
 barriers) with in-memory and local-filesystem backends and a conformance
 suite. Its requirements and design decisions are recorded in
@@ -73,7 +73,7 @@ No behaviour is added or changed before the documents that govern it say so.
 1. **Small, explicit contracts.** Every exported type and function documents
    its behaviour, errors, concurrency safety and cancellation.
 2. **Dependencies.** Standard library first. The only other modules are
-   `github.com/justusschock/go-concurrency` (futures) and
+   `github.com/justusschock/concurrency` (futures) and
    `golang.org/x/sys` (file locks), as allowed by ADR-0004. Backend client
    libraries belong in other modules; a new dependency needs an ADR.
 3. **Errors.** Sentinel errors and typed errors are part of the API; wrap

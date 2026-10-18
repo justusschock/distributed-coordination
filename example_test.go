@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	coordination "github.com/justusschock/go-distributed-coordination"
-	"github.com/justusschock/go-distributed-coordination/memory"
+	coordination "github.com/justusschock/distributed-coordination"
+	"github.com/justusschock/distributed-coordination/memory"
 )
 
 // Acquire a fenced lease and pass its token to the protected resource.

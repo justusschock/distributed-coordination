@@ -8,8 +8,8 @@ import (
 	"testing/synctest"
 	"time"
 
-	coordination "github.com/justusschock/go-distributed-coordination"
-	"github.com/justusschock/go-distributed-coordination/memory"
+	coordination "github.com/justusschock/distributed-coordination"
+	"github.com/justusschock/distributed-coordination/memory"
 )
 
 // FR-COORD-07

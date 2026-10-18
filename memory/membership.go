@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	coordination "github.com/justusschock/go-distributed-coordination"
+	coordination "github.com/justusschock/distributed-coordination"
 )
 
 type memberRecord struct {

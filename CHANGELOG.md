@@ -47,7 +47,7 @@ Preparation for the first public release.
 ### Changed
 
 - The minimum Go version is 1.22; the module depends on
-  `go-concurrency` v0.2.0.
+  `concurrency` v0.2.0.
 
 ## [0.1.0] - 2026-07-17
 

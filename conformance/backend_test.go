@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	coordination "github.com/justusschock/go-distributed-coordination"
-	"github.com/justusschock/go-distributed-coordination/conformance"
-	"github.com/justusschock/go-distributed-coordination/file"
-	"github.com/justusschock/go-distributed-coordination/memory"
+	coordination "github.com/justusschock/distributed-coordination"
+	"github.com/justusschock/distributed-coordination/conformance"
+	"github.com/justusschock/distributed-coordination/file"
+	"github.com/justusschock/distributed-coordination/memory"
 )
 
 // FR-COORD-17, FR-COORD-11

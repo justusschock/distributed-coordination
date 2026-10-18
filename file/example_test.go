@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
-	coordination "github.com/justusschock/go-distributed-coordination"
-	"github.com/justusschock/go-distributed-coordination/file"
+	coordination "github.com/justusschock/distributed-coordination"
+	"github.com/justusschock/distributed-coordination/file"
 )
 
 func ExampleNewBackend() {

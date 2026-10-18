@@ -8,7 +8,7 @@ import (
 	"testing/synctest"
 	"time"
 
-	coordination "github.com/justusschock/go-distributed-coordination"
+	coordination "github.com/justusschock/distributed-coordination"
 )
 
 // FR-COORD-09

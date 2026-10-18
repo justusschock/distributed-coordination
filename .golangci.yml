@@ -16,4 +16,4 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/justusschock/go-distributed-coordination
+        - github.com/justusschock/distributed-coordination

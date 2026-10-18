@@ -11,8 +11,8 @@ import (
 	"testing/synctest"
 	"time"
 
-	coordination "github.com/justusschock/go-distributed-coordination"
-	"github.com/justusschock/go-distributed-coordination/file"
+	coordination "github.com/justusschock/distributed-coordination"
+	"github.com/justusschock/distributed-coordination/file"
 )
 
 func newBackend(t *testing.T, dir string, opts ...file.Option) *file.Backend {

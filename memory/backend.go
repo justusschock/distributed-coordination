@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	coordination "github.com/justusschock/go-distributed-coordination"
+	coordination "github.com/justusschock/distributed-coordination"
 )
 
 // Backend is the in-memory reference backend. Its zero value is not usable;

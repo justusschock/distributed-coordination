@@ -49,7 +49,7 @@ or loss. Expiry is decided by comparing the stored deadline with
 `Clock.Now()` under the backend's lock, on every acquisition, renewal,
 release and listing; timers from `Clock.After` only trigger that check.
 Renewal extends the deadline from the current time. All exported types
-are safe for concurrent use. `KeepAlive` runs on a `go-concurrency`
+are safe for concurrent use. `KeepAlive` runs on a `concurrency`
 goroutine and renews at `ttl/3`; `Campaign` stops it on `Resign`, lease
 loss or context cancellation but does not release the lease on
 cancellation. In the file backend the holding process enforces expiry,

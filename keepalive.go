@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/justusschock/go-concurrency"
+	"github.com/justusschock/concurrency"
 )
 
 // KeepAlive renews lease with ttl immediately and then every ttl/3 (at least

@@ -1,4 +1,4 @@
-# go-distributed-coordination
+# distributed-coordination
 
 Backend-neutral distributed-coordination contracts for Go: fenced leases,
 keepalive, mutexes, leader election, expiring membership and reusable
@@ -15,7 +15,7 @@ to write coordination logic once and plug in any backend.
   after release or expiry.
 - **Keepalive.** `KeepAlive` renews a lease immediately and then every
   `ttl/3`, and reports cancellation, loss or renewal errors through a
-  `go-concurrency` future.
+  `concurrency` future.
 - **Mutex and leader election.** `Mutex` and `Campaign` work with any
   `Backend` and hand out fencing tokens.
 - **Membership and barriers.** `Registry` tracks expiring group members
@@ -31,11 +31,11 @@ to write coordination logic once and plug in any backend.
 ## Installation
 
 ```sh
-go get github.com/justusschock/go-distributed-coordination@latest
+go get github.com/justusschock/distributed-coordination@latest
 ```
 
 Requires Go 1.25 or newer. The only non-standard-library dependencies are
-[`github.com/justusschock/go-concurrency`](https://github.com/justusschock/go-concurrency)
+[`github.com/justusschock/concurrency`](https://github.com/justusschock/concurrency)
 (the future returned by `KeepAlive`) and
 [`golang.org/x/sys`](https://pkg.go.dev/golang.org/x/sys) (operating-system
 locks in package `file`).
@@ -54,8 +54,8 @@ import (
 	"fmt"
 	"time"
 
-	coordination "github.com/justusschock/go-distributed-coordination"
-	"github.com/justusschock/go-distributed-coordination/memory"
+	coordination "github.com/justusschock/distributed-coordination"
+	"github.com/justusschock/distributed-coordination/memory"
 )
 
 func main() {
@@ -201,10 +201,10 @@ deadline, written atomically under the lock. Guarantees and limits:
 
 | Package | Description |
 | --- | --- |
-| [`coordination`](https://pkg.go.dev/github.com/justusschock/go-distributed-coordination) (root) | Contracts (`Backend`, `Lease`, `Registry`, `Membership`, `Barrier`, `Clock`), helpers (`KeepAlive`, `Mutex`, `Campaign`) and errors. |
-| [`memory`](https://pkg.go.dev/github.com/justusschock/go-distributed-coordination/memory) | In-process reference backend implementing every contract. |
-| [`file`](https://pkg.go.dev/github.com/justusschock/go-distributed-coordination/file) | Cross-process backend over lock files in a local directory. |
-| [`conformance`](https://pkg.go.dev/github.com/justusschock/go-distributed-coordination/conformance) | `Run`, the test suite every `Backend` implementation must pass. |
+| [`coordination`](https://pkg.go.dev/github.com/justusschock/distributed-coordination) (root) | Contracts (`Backend`, `Lease`, `Registry`, `Membership`, `Barrier`, `Clock`), helpers (`KeepAlive`, `Mutex`, `Campaign`) and errors. |
+| [`memory`](https://pkg.go.dev/github.com/justusschock/distributed-coordination/memory) | In-process reference backend implementing every contract. |
+| [`file`](https://pkg.go.dev/github.com/justusschock/distributed-coordination/file) | Cross-process backend over lock files in a local directory. |
+| [`conformance`](https://pkg.go.dev/github.com/justusschock/distributed-coordination/conformance) | `Run`, the test suite every `Backend` implementation must pass. |
 
 Packages under `internal/`, should any be added, are not part of the API.
 
@@ -250,7 +250,7 @@ monotonically increasing tokens, expiry and record-identity checks.
 - [docs/](docs/README.md): requirements (PRD) and architecture decision
   records (ADRs).
 - API reference on
-  [pkg.go.dev](https://pkg.go.dev/github.com/justusschock/go-distributed-coordination).
+  [pkg.go.dev](https://pkg.go.dev/github.com/justusschock/distributed-coordination).
 
 ## Contributing
 

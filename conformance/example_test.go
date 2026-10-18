@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	coordination "github.com/justusschock/go-distributed-coordination"
-	"github.com/justusschock/go-distributed-coordination/conformance"
-	"github.com/justusschock/go-distributed-coordination/memory"
+	coordination "github.com/justusschock/distributed-coordination"
+	"github.com/justusschock/distributed-coordination/conformance"
+	"github.com/justusschock/distributed-coordination/memory"
 )
 
 // Backend authors call Run from a test in their package, returning a fresh

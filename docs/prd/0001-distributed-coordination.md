@@ -1,4 +1,4 @@
-# PRD 0001: go-distributed-coordination
+# PRD 0001: distributed-coordination
 
 | Field | Value |
 |---|---|
@@ -26,7 +26,7 @@ A plain lock is also not enough for correctness: a worker that pauses
 writing after its lease expired and another worker took over. The
 protected resource needs a *fencing token* to reject such late writes.
 
-`go-distributed-coordination` defines small, backend-neutral contracts for
+`distributed-coordination` defines small, backend-neutral contracts for
 fenced leases, membership and barriers, generic helpers built on them
 (keepalive, mutex, leader election), two backends (an in-memory reference
 and a cross-process local-filesystem backend) and a conformance suite so
@@ -72,7 +72,7 @@ third-party backends prove the same observable semantics.
 
 - NG1 Adapters for etcd, Consul, ZooKeeper, SQL, Redis, Kubernetes or network
   services; they belong in the modules that own those dependencies (one such
-  adapter lives in `go-object-storage`).
+  adapter lives in `object-storage`).
 - NG2 Distributed transactions, scheduling, work queues or resource
   selection; these are built on top of leases by other libraries.
 - NG3 Enforcing fencing at the protected resource; the library hands out
@@ -89,7 +89,7 @@ third-party backends prove the same observable semantics.
 | FR-COORD-03 | A contended acquisition with `Wait: true` waits for release or expiry of the holder and returns the context's error when its context is done first. | MUST |
 | FR-COORD-04 | Each successful acquisition of a key carries a `FencingToken` strictly greater than every token previously granted for that key, including after release and expiry. | MUST |
 | FR-COORD-05 | `Lease.Done` closes exactly once on release or loss; `Renew` extends the deadline from the backend clock's current time; `Renew` and `Release` return `ErrLeaseLost` after release, expiry or replacement. | MUST |
-| FR-COORD-06 | `KeepAlive` renews a lease immediately and then every `ttl/3` (at least every nanosecond) and returns a `go-concurrency` future that resolves with the cancellation cause, `ErrLeaseLost` on lease loss, or the first renewal error; it rejects a nil lease or non-positive TTL with `ErrInvalidRequest`. | MUST |
+| FR-COORD-06 | `KeepAlive` renews a lease immediately and then every `ttl/3` (at least every nanosecond) and returns a `concurrency` future that resolves with the cancellation cause, `ErrLeaseLost` on lease loss, or the first renewal error; it rejects a nil lease or non-positive TTL with `ErrInvalidRequest`. | MUST |
 | FR-COORD-07 | `Mutex` (`NewMutex`, `Lock`, `Unlock`) wraps a waiting acquisition for one key and owner, returns the fencing token from `Lock`, rejects duplicate or concurrent `Lock` and `Unlock` without a lease with `ErrNotOwner`, and validates its arguments with `ErrInvalidRequest`. | MUST |
 | FR-COORD-08 | `Campaign` waits for the lease `election/<name>`, keeps it alive, exposes the token and a `Lost` channel that closes on lease loss or keepalive end, and `Leadership.Resign` releases at most once, returning the first result to every call. | MUST |
 | FR-COORD-09 | A `Registry` registers expiring members with defensively copied metadata, rejects a duplicate active group/ID with `ErrNotAcquired`, allows rejoining after leave or expiry, lists active members sorted by ID, closes `Membership.Done` on expiry or leave, and returns `ErrLeaseLost` from stale `Renew` and `Leave`. | MUST |
@@ -108,7 +108,7 @@ third-party backends prove the same observable semantics.
 |---|---|---|
 | NFR-COORD-01 | Every exported type is safe for concurrent use or documents otherwise. | `go test -race -count=3 ./...` passes. |
 | NFR-COORD-02 | Tests are deterministic: time-dependent tests use `testing/synctest` or an injected clock; only cross-process tests use real time. | No wall-clock sleeps in in-process tests; repeated runs pass. |
-| NFR-COORD-03 | Minimal dependencies: the standard library, `go-concurrency` and `golang.org/x/sys` only. | `go.mod` require block. |
+| NFR-COORD-03 | Minimal dependencies: the standard library, `concurrency` and `golang.org/x/sys` only. | `go.mod` require block. |
 | NFR-COORD-04 | The file backend supports Linux, macOS, the BSDs and Windows; other platforms get `errors.ErrUnsupported` from `NewBackend`. | CI runs file and conformance tests on Linux, macOS and Windows. |
 | NFR-COORD-05 | Supports Go 1.25 and the two latest Go releases. | CI matrix `1.25.x`, `oldstable`, `stable`. |
 | NFR-COORD-06 | The library never logs; it reports through return values, futures and channels. | Code review; no `log` or `fmt.Print` in non-test code. |

@@ -1,7 +1,7 @@
 # Documentation
 
 Requirements (PRDs) and design decisions (ADRs) for
-go-distributed-coordination. The process is described in
+distributed-coordination. The process is described in
 [ADR-0001](adr/0001-record-architecture-decisions.md) and
 [AGENTS.md](../AGENTS.md). New documents start from the templates:
 [PRD template](prd/TEMPLATE.md), [ADR template](adr/TEMPLATE.md).
@@ -10,7 +10,7 @@ go-distributed-coordination. The process is described in
 
 | PRD | Title | Status | Implementation |
 |---|---|---|---|
-| [0001](prd/0001-go-distributed-coordination.md) | go-distributed-coordination | Accepted | Complete |
+| [0001](prd/0001-distributed-coordination.md) | distributed-coordination | Accepted | Complete |
 
 ## Architecture decisions
 
