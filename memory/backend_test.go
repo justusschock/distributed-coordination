@@ -3,16 +3,16 @@ package memory
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	coordination "github.com/justusschock/go-distributed-coordination"
 )
 
+// FR-COORD-04
 func TestBackendFencingTokensNeverRepeat(t *testing.T) {
-	clock := newFakeClock(time.Unix(100, 0))
-	backend := NewBackend(clock)
+	backend := NewBackend(nil)
 
 	first, err := backend.Acquire(context.Background(), coordination.AcquireRequest{
 		Key:   "jobs",
@@ -34,60 +34,72 @@ func TestBackendFencingTokensNeverRepeat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = second.Release(context.Background()) })
 	if second.Info().Token <= first.Info().Token {
 		t.Fatalf("tokens = %d then %d", first.Info().Token, second.Info().Token)
 	}
 }
 
+// FR-COORD-03, FR-COORD-05
 func TestBackendExpiryLosesLeaseAndAllowsWaiter(t *testing.T) {
-	clock := newFakeClock(time.Unix(100, 0))
-	backend := NewBackend(clock)
+	synctest.Test(t, func(t *testing.T) {
+		backend := NewBackend(nil)
+		start := time.Now()
 
-	first, err := backend.Acquire(context.Background(), coordination.AcquireRequest{
-		Key:   "jobs",
-		Owner: "one",
-		TTL:   time.Second,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	result := make(chan coordination.Lease, 1)
-	errs := make(chan error, 1)
-	go func() {
-		lease, acquireErr := backend.Acquire(context.Background(), coordination.AcquireRequest{
+		first, err := backend.Acquire(context.Background(), coordination.AcquireRequest{
 			Key:   "jobs",
-			Owner: "two",
+			Owner: "one",
 			TTL:   time.Second,
-			Wait:  true,
 		})
-		if acquireErr != nil {
-			errs <- acquireErr
-			return
+		if err != nil {
+			t.Fatal(err)
 		}
-		result <- lease
-	}()
 
-	clock.Advance(time.Second)
+		result := make(chan coordination.Lease, 1)
+		errs := make(chan error, 1)
+		go func() {
+			lease, acquireErr := backend.Acquire(context.Background(), coordination.AcquireRequest{
+				Key:   "jobs",
+				Owner: "two",
+				TTL:   time.Second,
+				Wait:  true,
+			})
+			if acquireErr != nil {
+				errs <- acquireErr
+				return
+			}
+			result <- lease
+		}()
 
-	select {
-	case <-first.Done():
-	case <-time.After(time.Second):
-		t.Fatal("lease did not expire")
-	}
-
-	select {
-	case err := <-errs:
-		t.Fatal(err)
-	case second := <-result:
-		if second.Info().Token <= first.Info().Token {
-			t.Fatal("token did not advance")
+		time.Sleep(time.Second - time.Nanosecond)
+		synctest.Wait()
+		if isClosed(first.Done()) || len(result) != 0 {
+			t.Fatal("lease expired or waiter acquired before the deadline")
 		}
-	case <-time.After(time.Second):
-		t.Fatal("waiter did not acquire")
-	}
+
+		time.Sleep(time.Nanosecond)
+		synctest.Wait()
+		if !isClosed(first.Done()) {
+			t.Fatal("lease did not expire at its deadline")
+		}
+		select {
+		case err := <-errs:
+			t.Fatal(err)
+		case second := <-result:
+			defer func() { _ = second.Release(context.Background()) }()
+			if second.Info().Token <= first.Info().Token {
+				t.Fatal("token did not advance")
+			}
+			if got := second.Info().AcquiredAt.Sub(start); got != time.Second {
+				t.Fatalf("waiter acquired after %v, want 1s", got)
+			}
+		default:
+			t.Fatal("waiter did not acquire")
+		}
+	})
 }
 
+// FR-COORD-01, FR-COORD-02
 func TestBackendRejectsInvalidAndContendedAcquisitions(t *testing.T) {
 	backend := NewBackend(nil)
 
@@ -111,127 +123,93 @@ func TestBackendRejectsInvalidAndContendedAcquisitions(t *testing.T) {
 	if !errors.Is(err, coordination.ErrNotAcquired) {
 		t.Fatalf("contended Acquire() error = %v, want ErrNotAcquired", err)
 	}
+	if _, err := lease.Renew(context.Background(), 0); !errors.Is(err, coordination.ErrInvalidRequest) {
+		t.Fatalf("Renew(0) error = %v, want ErrInvalidRequest", err)
+	}
 }
 
+// FR-COORD-05
 func TestBackendLostLeaseCannotRenewOrRelease(t *testing.T) {
-	clock := newFakeClock(time.Unix(100, 0))
-	backend := NewBackend(clock)
-	lease, err := backend.Acquire(context.Background(), coordination.AcquireRequest{Key: "key", Owner: "one", TTL: time.Second})
-	if err != nil {
-		t.Fatal(err)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		backend := NewBackend(nil)
+		lease, err := backend.Acquire(context.Background(), coordination.AcquireRequest{Key: "key", Owner: "one", TTL: time.Second})
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	clock.Advance(time.Second)
-	select {
-	case <-lease.Done():
-	case <-time.After(time.Second):
-		t.Fatal("lease did not expire")
-	}
+		time.Sleep(time.Second)
+		synctest.Wait()
+		if !isClosed(lease.Done()) {
+			t.Fatal("lease did not expire")
+		}
 
-	if _, err := lease.Renew(context.Background(), time.Second); !errors.Is(err, coordination.ErrLeaseLost) {
-		t.Fatalf("Renew() error = %v, want ErrLeaseLost", err)
-	}
-	if err := lease.Release(context.Background()); !errors.Is(err, coordination.ErrLeaseLost) {
-		t.Fatalf("Release() error = %v, want ErrLeaseLost", err)
-	}
-}
-
-func TestBackendWaitingAcquisitionHonorsCancellation(t *testing.T) {
-	clock := newFakeClock(time.Unix(100, 0))
-	backend := NewBackend(clock)
-	first, err := backend.Acquire(context.Background(), coordination.AcquireRequest{
-		Key: "key", Owner: "one", TTL: time.Minute,
+		if _, err := lease.Renew(context.Background(), time.Second); !errors.Is(err, coordination.ErrLeaseLost) {
+			t.Fatalf("Renew() error = %v, want ErrLeaseLost", err)
+		}
+		if err := lease.Release(context.Background()); !errors.Is(err, coordination.ErrLeaseLost) {
+			t.Fatalf("Release() error = %v, want ErrLeaseLost", err)
+		}
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = first.Release(context.Background()) })
-	clock.waitForTimer(t)
+}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	result := make(chan error, 1)
-	go func() {
-		_, acquireErr := backend.Acquire(ctx, coordination.AcquireRequest{
-			Key: "key", Owner: "two", TTL: time.Minute, Wait: true,
+// FR-COORD-03
+func TestBackendWaitingAcquisitionHonorsCancellation(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		backend := NewBackend(nil)
+		first, err := backend.Acquire(context.Background(), coordination.AcquireRequest{
+			Key: "key", Owner: "one", TTL: time.Minute,
 		})
-		result <- acquireErr
-	}()
-	clock.waitForTimer(t)
-	cancel()
-
-	select {
-	case err := <-result:
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("waiting Acquire() error = %v, want context.Canceled", err)
+		if err != nil {
+			t.Fatal(err)
 		}
-	case <-time.After(time.Second):
-		t.Fatal("waiting Acquire did not return after cancellation")
-	}
-}
+		defer func() { _ = first.Release(context.Background()) }()
 
-type fakeTimer struct {
-	at time.Time
-	ch chan time.Time
-}
-
-type fakeClock struct {
-	mu         sync.Mutex
-	now        time.Time
-	timers     []*fakeTimer
-	timerAdded chan struct{}
-}
-
-func newFakeClock(now time.Time) *fakeClock {
-	return &fakeClock{now: now, timerAdded: make(chan struct{}, 64)}
-}
-
-func (c *fakeClock) Now() time.Time {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.now
-}
-
-func (c *fakeClock) After(delay time.Duration) <-chan time.Time {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	timer := &fakeTimer{at: c.now.Add(delay), ch: make(chan time.Time, 1)}
-	c.timers = append(c.timers, timer)
-	c.timerAdded <- struct{}{}
-	return timer.ch
-}
-
-func (c *fakeClock) Advance(delay time.Duration) {
-	c.mu.Lock()
-	c.now = c.now.Add(delay)
-	now := c.now
-	remaining := c.timers[:0]
-	var due []*fakeTimer
-	for _, timer := range c.timers {
-		if !timer.at.After(now) {
-			due = append(due, timer)
-		} else {
-			remaining = append(remaining, timer)
+		ctx, cancel := context.WithCancel(context.Background())
+		result := make(chan error, 1)
+		go func() {
+			_, acquireErr := backend.Acquire(ctx, coordination.AcquireRequest{
+				Key: "key", Owner: "two", TTL: time.Minute, Wait: true,
+			})
+			result <- acquireErr
+		}()
+		synctest.Wait()
+		if len(result) != 0 {
+			t.Fatal("waiting Acquire returned while the key was held")
 		}
-	}
-	c.timers = remaining
-	c.mu.Unlock()
+		cancel()
+		synctest.Wait()
 
-	for _, timer := range due {
-		timer.ch <- now
-	}
+		select {
+		case err := <-result:
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("waiting Acquire() error = %v, want context.Canceled", err)
+			}
+		default:
+			t.Fatal("waiting Acquire did not return after cancellation")
+		}
+	})
 }
 
-func (c *fakeClock) elapseWithoutFiring(delay time.Duration) {
-	c.mu.Lock()
-	c.now = c.now.Add(delay)
-	c.mu.Unlock()
-}
-
-func (c *fakeClock) waitForTimer(t *testing.T) {
-	t.Helper()
+func isClosed(done <-chan struct{}) bool {
 	select {
-	case <-c.timerAdded:
-	case <-time.After(time.Second):
-		t.Fatal("timer was not registered")
+	case <-done:
+		return true
+	default:
+		return false
 	}
+}
+
+// laggingClock reads the real (in tests: synctest virtual) time but delivers
+// every timer lag late. It models delayed timer delivery, so tests can check
+// that deadlines are enforced by comparing times rather than by timers.
+type laggingClock struct {
+	lag time.Duration
+}
+
+func (laggingClock) Now() time.Time {
+	return time.Now()
+}
+
+func (c laggingClock) After(delay time.Duration) <-chan time.Time {
+	return time.After(delay + c.lag)
 }
